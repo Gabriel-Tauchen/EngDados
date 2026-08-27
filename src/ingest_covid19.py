@@ -44,7 +44,9 @@ def register(origins, destinations):
         ],
         "extraction_date": datetime.now().isoformat(),
     }
-    (BRONZE / "source.json").write_text(json.dumps(info, indent=2))
+    path = BRONZE / "source.jsonl"
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(info, ensure_ascii=False) + "\n")
 
 def main():
     folder = ingest()
