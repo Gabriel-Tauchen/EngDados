@@ -41,6 +41,24 @@
 - `reports/` = relatórios de profiling
 - `src/` = scripts de ingestão e transformação
 
+## Execução do pipeline até a camada silver
+
+No PowerShell, a partir da pasta raiz do projeto e com o ambiente virtual ativado, execute os comandos nesta ordem:
+
+```powershell
+python -m pip install -r requirements.txt
+
+python src/ingest_covid19.py
+python src/ingest_air-traffic-EU.py
+
+python src/transform_covid_data.py
+python src/transform_flight_data.py
+```
+
+Os scripts de ingestão baixam os CSVs do Kaggle e os copiam para `data/bronze/`. Em seguida, os scripts de transformação tratam os dados e geram arquivos Parquet em `data/silver/covid19/` e `data/silver/air-traffic-EU/`.
+
+> A ingestão requer acesso ao Kaggle configurado. Se os CSVs brutos já estiverem atualizados na camada bronze, pule os dois comandos `ingest` e execute apenas os comandos de transformação. A instalação das dependências pode ser omitida quando elas já estiverem instaladas no ambiente virtual.
+
 ## Mapeamento canônico de países
 
 Para manter a compatibilidade entre o dataset de tráfego aéreo (Eurocontrol) e o dataset de COVID-19 (OWID), foi definido um dicionário de padronização em `src/country_mapping.py`.
