@@ -40,3 +40,61 @@
 - `data/silver/` = dados tratados, em parquet, prontos para análise
 - `reports/` = relatórios de profiling
 - `src/` = scripts de ingestão e transformação
+
+## Mapeamento canônico de países
+
+Para manter a compatibilidade entre o dataset de tráfego aéreo (Eurocontrol) e o dataset de COVID-19 (OWID), foi definido um dicionário de padronização em `src/country_mapping.py`.
+
+- A chave de normalização usa texto em minúsculas, sem acentos e sem espaços extras.
+- Os nomes canônicos seguem a convenção do OWID, como `United Kingdom`, `Czechia`, `North Macedonia`, `Bosnia and Herzegovina`, `Moldova` e `Turkey`.
+- A função `resolve_canonical_country(raw_name)` retorna o nome padrô nato do país quando houver correspondência explícita; caso contrário, preserva o valor original em formato padronizado.
+
+## Chaves primárias e identidade temporal
+
+### COVID-19
+- Chave principal de identidade temporal: `iso_code + date`
+- Justificativa: cada país deve ter, no máximo, uma observação por dia para manter a integridade da série temporal e evitar duplicatas causadas por reprocessamento ou reaproveitamento de arquivos.
+
+### Air Traffic Europe
+- Chave principal de identidade temporal: `YEAR + FLT_DATE + APT_ICAO`
+- Justificativa: cada aeroporto pode registrar múltiplos registros em um mesmo dia, mas o identificador de aeroporto + data define a unidade de observação para a série operacional.
+
+## Harmonização de nomes de país
+
+Para permitir a comparação entre a série de voos europeus e a série de casos de COVID, foi criado o módulo [src/country_mapping.py](src/country_mapping.py) com a função `resolve_canonical_country()`.
+
+- Esse passo é aplicado em ambas as transformações antes do merge analítico.
+- A coluna `country_name` padroniza nomes divergentes como `Czech Republic` e `Czechia`, `Turkey` e `Turkiye`, `Republic of North Macedonia` e `North Macedonia`.
+- A padronização reduz erros de join e garante que a análise comparativa use a mesma identidade geográfica em todos os datasets.
+
+## Atributos derivados
+
+### COVID-19
+- `location_key`: chave textual normalizada para o nome do país, usada em junções e comparações entre registros.
+- `new_cases_per_million`: casos novos por milhão de habitantes.
+- `total_cases_per_million`: casos acumulados por milhão de habitantes.
+- `new_deaths_per_million`: mortes novas por milhão de habitantes.
+- `new_cases_pct_change`: variação percentual diária de casos novos por país.
+
+### Air Traffic Europe
+- `APT_ICAO_KEY`: chave textual normalizada para o código do aeroporto.
+- `APT_NAME_KEY`: chave textual normalizada para o nome do aeroporto.
+- `STATE_NAME_KEY`: chave textual normalizada para o nome do estado/país.
+- `TOTAL_FLIGHTS`: soma de partidas e chegadas diárias.
+- `TOTAL_IFR_FLIGHTS`: soma das operações IFR de partida e chegada.
+- `IFR_SHARE`: proporção percentual de operações IFR no total de voos.
+- `flight_volume_pct_change`: variação percentual do volume diário de voos por aeroporto.
+
+## Decisões de limpeza e padronização
+
+- 1) Remoção de espaços em colunas e strings: elimina espaçamento inconsistente em nomes de colunas e valores textuais antes da análise.
+- 2) Filtro por país/escopo: mantém apenas registros relevantes para Europa e para o período de interesse (2019+ no caso do tráfego aéreo).
+- 3) Padronização de texto e país: normaliza letras, acentos e variações de nomenclatura para permitir comparações entre fontes e reduzir ruídos de merge.
+- 4) Conversão de tipos: datas em `datetime` e campos numéricos em tipos analíticos adequados.
+- 5) Validação de duplicatas: remove linhas idênticas e valida integridade temporal por chave principal.
+- 6) Persistência em parquet: grava os dados em formato eficiente para análise e consumo da camada silver.
+
+## Observações finais
+
+- O projeto não exige uma terceira fonte de dados; o contexto analítico é derivado dos dois datasets já fornecidos.
+- A camada silver foi construída para conter dados limpos, consistentes e prontos para benchmarking temporal e comparativo entre saúde pública e operação aeroportuária.
