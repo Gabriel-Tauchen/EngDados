@@ -1,15 +1,17 @@
 # Trabalho de Engenharia de Dados (ECOX14) da UNIFEI em 2026.2
 
-## Data source
-| Fonte | Formato | Acesso | Extraido | Link |
+## Fontes de dados
 
+| Fonte | Formato | Acesso | Extraído em | Link |
+| --- | --- | --- | --- | --- |
 | Our World in Data - COVID-19 | CSV | token | 20/08/2026 | www.kaggle.com/datasets/caesarmario/our-world-in-data-covid19-dataset |
-
 | Air Traffic in Europe from 2016 to 2024 | CSV | token | 20/08/2026 | www.kaggle.com/datasets/samithsachidanandan/air-traffic-in-europe-from-2016-to-2024 |
 
-## Observations
+## Observações gerais
 
-- Air-traffic from Europe are divided in 9 .csv files.
+- O dataset de COVID-19 foi armazenado em bronze em `data/bronze/covid19`.
+- O dataset de tráfego aéreo está em `data/bronze/air-traffic-EU` e foi dividido em arquivos por ano.
+- O projeto usa a camada bronze como versão original e a camada silver como versão tratada para análise.
 
 ## Decisões de transformação (COVID-19)
 
@@ -17,5 +19,24 @@
 - 2) Filtro de países fora da Europa: 274.291 linhas removidas, restando 75.794 linhas; o conjunto original contém dados globais e o projeto exige apenas registros com `continent == "Europe"`, por isso o total caiu do universo mundial para o escopo europeu.
 - 3) Validação da chave temporal: 0 duplicatas detectadas para `iso_code + date`; garante que cada país tenha no máximo uma observação por dia, preservando a integridade da série temporal e evitando registros inconsistentes.
 - 4) Conversão da coluna `date` para datetime: 0 linhas removidas; transforma a data em tipo temporal, permitindo ordenação, filtros por período e cálculos de evolução ao longo do tempo.
+- 5) Persistência em parquet na silver: 1 arquivo gerado; a camada silver foi criada em formato parquet para reduzir custo de leitura e manter a tabela analítica pronta para consumo.
 
 > Resumo do impacto: o dataset cru tinha 350.085 linhas; após as decisões acima, o dataset final no silver ficou com 75.794 linhas, porque o processo removeu dados fora do escopo europeu e validou a integridade temporal antes de gravar o parquet.
+
+## Decisões de transformação (Air Traffic Europe)
+
+- 1) Seleção dos arquivos mais recentes por ano: 6 arquivos usados (2019 a 2024); o projeto considera apenas os arquivos de extração mais recentes de cada ano e ignora versões antigas para evitar duplicidade na camada bronze.
+- 2) Filtro de escopo 2019+ : 0 linhas removidas; o objetivo foi manter apenas o período relevante para a análise atual, evitando dados antigos que não fazem parte do estudo principal.
+- 3) Limpeza de colunas e padronização de textos: 0 registros removidos; ajusta nomes e espaços em campos como aeroporto, estado e mês, reduzindo problemas de merge e comparações entre arquivos.
+- 4) Seleção das colunas operacionais: 13 colunas mantidas; preserva identificadores de data, aeroporto, estado e métricas de voos sem excluir informação útil para análise de demanda e operação.
+- 5) Conversão de tipos: `YEAR` e `MONTH_NUM` convertidos para inteiros; `FLT_DATE` convertido para datetime; campos de voos convertidos para numéricos e faltantes tratados como zero para manter consistência operacional.
+- 6) Validação da série temporal por aeroporto e data: 1 linha duplicada removida; a regra garante que não existam registros idênticos repetidos na mesma data e aeroporto, evitando sobrecontagem artificial no total.
+
+> Resumo do impacto: o conjunto bronzedo de tráfego aéreo começou com 677.190 linhas em 2019-2024; após a limpeza, seleção, padronização e remoção de duplicatas, o silver final ficou com 677.189 linhas, preservando a série temporal e eliminando a repetição exata de um registro.
+
+## Estrutura geral do projeto
+
+- `data/bronze/` = dados originais, sem transformação
+- `data/silver/` = dados tratados, em parquet, prontos para análise
+- `reports/` = relatórios de profiling
+- `src/` = scripts de ingestão e transformação
