@@ -18,6 +18,7 @@ COUNTRY_MAP = {
     "czechia": "Czechia",
     "denmark": "Denmark",
     "england": "England",
+    "espana": "Spain",
     "estonia": "Estonia",
     "faeroe islands": "Faroe Islands",
     "faroe islands": "Faroe Islands",

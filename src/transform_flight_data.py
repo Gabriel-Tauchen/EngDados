@@ -1,4 +1,6 @@
+import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -48,13 +50,13 @@ def load_latest_files_by_year() -> list[Path]:
     return latest_files
 
 
-def load_flight_data() -> pd.DataFrame:
+def load_flight_data() -> tuple[pd.DataFrame, list[Path]]:
     """Load and concatenate the most recent bronze files for each year."""
     files = load_latest_files_by_year()
     frames = [pd.read_csv(file) for file in files]
     df = pd.concat(frames, ignore_index=True)
     print(f"Rows before cleaning: {len(df)}")
-    return df
+    return df, files
 
 
 def build_flight_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -81,9 +83,13 @@ def build_flight_features(df: pd.DataFrame) -> pd.DataFrame:
 
     processed["TOTAL_FLIGHTS"] = processed["FLT_DEP_1"] + processed["FLT_ARR_1"]
     processed["TOTAL_IFR_FLIGHTS"] = processed["FLT_DEP_IFR_2"] + processed["FLT_ARR_IFR_2"]
+
+    import numpy as np
+
+    ifr_share = processed["TOTAL_IFR_FLIGHTS"] / processed["TOTAL_FLIGHTS"].replace(0, np.nan) * 100
     processed["IFR_SHARE"] = (
-        processed["TOTAL_IFR_FLIGHTS"] / processed["TOTAL_FLIGHTS"].replace(0, pd.NA) * 100
-    ).fillna(0)
+        ifr_share.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    )
 
     processed = calculate_percentage_change(
         processed,
@@ -132,21 +138,54 @@ def drop_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def save_silver(df: pd.DataFrame) -> Path:
-    """Persist the cleaned flight dataset in the silver layer."""
+    """Persist the cleaned flight dataset in the silver layer as a canonical parquet file."""
     SILVER.mkdir(parents=True, exist_ok=True)
-    destination = SILVER / f"air-traffic-EU-{pd.Timestamp.now().strftime('%Y%m%d-%H%M%S')}.parquet"
+    destination = SILVER / "air-traffic-EU.parquet"
     df.to_parquet(destination, index=False)
     print(f"Saved flight silver file: {destination.name} | shape={df.shape}")
     return destination
 
 
-def main() -> None:
-    df = load_flight_data()
+def register_provenance(
+    origins: list[Path], destination: Path, before: int, after: int, decisions: list[str]
+) -> None:
+    """Append transformation provenance and data lineage to provenance.jsonl."""
+    info = {
+        "origins": [origin.name for origin in origins],
+        "silver_file": destination.name,
+        "before": before,
+        "after": after,
+        "decisions": decisions,
+        "transformation_date": datetime.now().isoformat(timespec="seconds"),
+    }
+    provenance_path = SILVER / "provenance.jsonl"
+    with provenance_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(info, ensure_ascii=False) + "\n")
+    print(f"Registered provenance in {provenance_path.name}")
+
+
+def main() -> Path:
+    df, origin_files = load_flight_data()
+    before_count = len(df)
+
     df = build_flight_features(df)
     df = df[df["YEAR"].astype(str).isin([str(year) for year in range(MIN_YEAR, 2051)])].copy()
     df = drop_exact_duplicates(df)
     df = select_columns(df)
-    save_silver(df)
+    destination = save_silver(df)
+
+    decisions = [
+        "select_latest_files_from_2019",
+        "strip_whitespace",
+        "resolve_canonical_country",
+        "parse_flt_date",
+        "calculate_totals_and_ifr_share",
+        "calculate_percentage_change_safe_inf",
+        "drop_exact_duplicates",
+        "save_canonical_silver_parquet",
+    ]
+    register_provenance(origin_files, destination, before_count, len(df), decisions)
+    return destination
 
 
 if __name__ == "__main__":

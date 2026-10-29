@@ -51,10 +51,14 @@ def calculate_percentage_change(
     value_col: str,
     target_col_name: str,
 ) -> pd.DataFrame:
-    """Compute the percentage change over time, sorted by group and time."""
+    """Compute the percentage change over time, sorted by group and time.
+
+    Handles zero-division and infinite values safely by replacing them with 0.
+    """
     ordered = df.sort_values([group_col, time_col]).copy()
+    pct = ordered.groupby(group_col)[value_col].pct_change().astype(float)
     ordered[target_col_name] = (
-        ordered.groupby(group_col)[value_col].pct_change().fillna(0) * 100
+        pct.replace([float("inf"), float("-inf")], float("nan")).fillna(0.0) * 100
     )
     return ordered
 
