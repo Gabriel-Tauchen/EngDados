@@ -6,3 +6,5 @@ __pycache__/
 kaggle.json
 reports/
 !data/silver/provenance.jsonl
+pipeline.log
+*.log

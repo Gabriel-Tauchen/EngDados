@@ -1,8 +1,10 @@
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from cleaning import (
@@ -11,19 +13,19 @@ from cleaning import (
     format_date_column,
     strip_whitespace,
 )
+from config import BRONZE_FLIGHT, SILVER_FLIGHT
 from country_mapping import resolve_canonical_country
 
-BRONZE = Path("data/bronze/air-traffic-EU")
-SILVER = Path("data/silver/air-traffic-EU")
+logger = logging.getLogger(__name__)
 PATTERN = "airport_traffic_*.csv"
 MIN_YEAR = 2019
 
 
 def load_latest_files_by_year() -> list[Path]:
     """Return the latest file for each year, starting from 2019."""
-    files = sorted(BRONZE.glob(PATTERN))
+    files = sorted(BRONZE_FLIGHT.glob(PATTERN))
     if not files:
-        raise FileNotFoundError(f"No bronze flight files found in {BRONZE}")
+        raise FileNotFoundError(f"No bronze flight files found in {BRONZE_FLIGHT}")
 
     selected: dict[int, tuple[str, Path]] = {}
     file_pattern = re.compile(r"airport_traffic_(\d{4})(?:_(\d{4}-\d{2}-\d{2}))?\.csv$")
@@ -43,10 +45,10 @@ def load_latest_files_by_year() -> list[Path]:
             selected[year] = (extraction_date, path)
 
     if not selected:
-        raise FileNotFoundError(f"No files from {MIN_YEAR} onward found in {BRONZE}")
+        raise FileNotFoundError(f"No files from {MIN_YEAR} onward found in {BRONZE_FLIGHT}")
 
     latest_files = [path for _, path in sorted(selected.values(), key=lambda item: item[1].name)]
-    print(f"Selected flight files: {[file.name for file in latest_files]}")
+    logger.info("Selected flight files: %s", [file.name for file in latest_files])
     return latest_files
 
 
@@ -55,7 +57,7 @@ def load_flight_data() -> tuple[pd.DataFrame, list[Path]]:
     files = load_latest_files_by_year()
     frames = [pd.read_csv(file) for file in files]
     df = pd.concat(frames, ignore_index=True)
-    print(f"Rows before cleaning: {len(df)}")
+    logger.info("Flight rows before cleaning: %d", len(df))
     return df, files
 
 
@@ -83,8 +85,6 @@ def build_flight_features(df: pd.DataFrame) -> pd.DataFrame:
 
     processed["TOTAL_FLIGHTS"] = processed["FLT_DEP_1"] + processed["FLT_ARR_1"]
     processed["TOTAL_IFR_FLIGHTS"] = processed["FLT_DEP_IFR_2"] + processed["FLT_ARR_IFR_2"]
-
-    import numpy as np
 
     ifr_share = processed["TOTAL_IFR_FLIGHTS"] / processed["TOTAL_FLIGHTS"].replace(0, np.nan) * 100
     processed["IFR_SHARE"] = (
@@ -133,16 +133,16 @@ def select_columns(df: pd.DataFrame) -> pd.DataFrame:
 def drop_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     """Remove exact duplicate rows before preserving the temporal series."""
     deduplicated = df.drop_duplicates(ignore_index=True)
-    print(f"Rows after duplicate removal: {len(deduplicated)}")
+    logger.info("Flight rows after duplicate removal: %d", len(deduplicated))
     return deduplicated
 
 
 def save_silver(df: pd.DataFrame) -> Path:
     """Persist the cleaned flight dataset in the silver layer as a canonical parquet file."""
-    SILVER.mkdir(parents=True, exist_ok=True)
-    destination = SILVER / "air-traffic-EU.parquet"
+    SILVER_FLIGHT.mkdir(parents=True, exist_ok=True)
+    destination = SILVER_FLIGHT / "air-traffic-EU.parquet"
     df.to_parquet(destination, index=False)
-    print(f"Saved flight silver file: {destination.name} | shape={df.shape}")
+    logger.info("Saved flight silver file: %s | shape=%s", destination.name, df.shape)
     return destination
 
 
@@ -158,10 +158,10 @@ def register_provenance(
         "decisions": decisions,
         "transformation_date": datetime.now().isoformat(timespec="seconds"),
     }
-    provenance_path = SILVER / "provenance.jsonl"
+    provenance_path = SILVER_FLIGHT / "provenance.jsonl"
     with provenance_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
-    print(f"Registered provenance in {provenance_path.name}")
+    logger.info("Registered provenance in %s", provenance_path.name)
 
 
 def main() -> Path:
@@ -189,4 +189,6 @@ def main() -> Path:
 
 
 if __name__ == "__main__":
+    from config import setup_logging
+    setup_logging()
     main()

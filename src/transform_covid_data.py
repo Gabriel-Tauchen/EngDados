@@ -1,7 +1,9 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from cleaning import (
@@ -10,31 +12,22 @@ from cleaning import (
     format_date_column,
     strip_whitespace,
 )
+from config import BRONZE_COVID, EUROCONTROL_ADDITIONAL_COUNTRIES, SILVER_COVID
 from country_mapping import resolve_canonical_country
 
-BRONZE = Path("data/bronze/covid19")
-SILVER = Path("data/silver/covid19")
+logger = logging.getLogger(__name__)
 PATTERN = "owid-covid-data*.csv"
-
-# Eurocontrol member or monitored partner states that OWID classifies in Asia or Africa
-EUROCONTROL_ADDITIONAL_COUNTRIES = {
-    "Armenia",
-    "Georgia",
-    "Israel",
-    "Morocco",
-    "Turkey",
-}
 
 
 def load_latest_bronze_file() -> tuple[pd.DataFrame, Path]:
     """Load the most recent COVID bronze file."""
-    files = sorted(BRONZE.glob(PATTERN))
+    files = sorted(BRONZE_COVID.glob(PATTERN))
     if not files:
-        raise FileNotFoundError(f"No bronze COVID files found in {BRONZE}")
+        raise FileNotFoundError(f"No bronze COVID files found in {BRONZE_COVID}")
 
     latest_file = files[-1]
     df = pd.read_csv(latest_file)
-    print(f"Loaded COVID bronze file: {latest_file.name} | shape={df.shape}")
+    logger.info("Loaded COVID bronze file: %s | shape=%s", latest_file.name, df.shape)
     return df, latest_file
 
 
@@ -43,7 +36,7 @@ def keep_european_and_eurocontrol_records(df: pd.DataFrame) -> pd.DataFrame:
     is_europe = df["continent"].eq("Europe")
     is_eurocontrol_partner = df["location"].isin(EUROCONTROL_ADDITIONAL_COUNTRIES)
     filtered = df[is_europe | is_eurocontrol_partner].copy()
-    print(f"Rows after Europe & Eurocontrol partner filter: {len(filtered)}")
+    logger.info("Rows after Europe & Eurocontrol partner filter: %d", len(filtered))
     return filtered
 
 
@@ -67,8 +60,6 @@ def build_covid_features(df: pd.DataFrame) -> pd.DataFrame:
         ).fillna(0)
     else:
         processed["stringency_index"] = 0.0
-
-    import numpy as np
 
     pop_series = processed["population"].replace(0, np.nan)
     processed["new_cases_per_million"] = (
@@ -120,10 +111,10 @@ def select_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def save_silver(df: pd.DataFrame) -> Path:
     """Persist the cleaned COVID data in the silver layer as a canonical parquet file."""
-    SILVER.mkdir(parents=True, exist_ok=True)
-    destination = SILVER / "covid19.parquet"
+    SILVER_COVID.mkdir(parents=True, exist_ok=True)
+    destination = SILVER_COVID / "covid19.parquet"
     df.to_parquet(destination, index=False)
-    print(f"Saved COVID silver file: {destination.name} | shape={df.shape}")
+    logger.info("Saved COVID silver file: %s | shape=%s", destination.name, df.shape)
     return destination
 
 
@@ -139,10 +130,10 @@ def register_provenance(
         "decisions": decisions,
         "transformation_date": datetime.now().isoformat(timespec="seconds"),
     }
-    provenance_path = SILVER / "provenance.jsonl"
+    provenance_path = SILVER_COVID / "provenance.jsonl"
     with provenance_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(info, ensure_ascii=False) + "\n")
-    print(f"Registered provenance in {provenance_path.name}")
+    logger.info("Registered provenance in %s", provenance_path.name)
 
 
 def main() -> Path:
@@ -168,4 +159,6 @@ def main() -> Path:
 
 
 if __name__ == "__main__":
+    from config import setup_logging
+    setup_logging()
     main()
