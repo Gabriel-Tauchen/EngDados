@@ -1,0 +1,135 @@
+version: 2
+
+models:
+  - name: dim_country
+    description: "Country dimension table with demographic and geographic attributes."
+    columns:
+      - name: country_id
+        description: "Primary key for the country dimension."
+        tests:
+          - unique
+          - not_null
+      - name: iso_code
+        description: "ISO 3166-1 alpha-3 country code."
+        tests:
+          - not_null
+      - name: country_name
+        description: "Full country name."
+      - name: continent
+        description: "Continent the country belongs to."
+      - name: region
+        description: "Sub-region or geographic region."
+      - name: population
+        description: "Country population."
+
+  - name: dim_airport
+    description: "Airport dimension table."
+    columns:
+      - name: airport_id
+        description: "Primary key for the airport dimension."
+        tests:
+          - unique
+          - not_null
+      - name: airport_name
+        description: "Name of the airport."
+        tests:
+          - not_null
+      - name: country
+        description: "Country where the airport is located."
+      - name: state_name
+        description: "State or province where the airport is located."
+
+  - name: fact_indicator
+    description: "Fact table with country-level yearly indicators. Grain: country_id + year."
+    columns:
+      - name: country_id
+        description: "Foreign key to dim_country."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_country')
+              field: country_id
+      - name: year
+        description: "Reference year."
+        tests:
+          - not_null
+      - name: value
+        description: "Primary indicator value."
+      - name: total_flights
+        description: "Total number of flights."
+      - name: total_ifr_flights
+        description: "Total IFR flights."
+      - name: new_cases
+        description: "New COVID-19 cases."
+      - name: total_cases
+        description: "Cumulative COVID-19 cases."
+      - name: new_deaths
+        description: "New COVID-19 deaths."
+      - name: total_deaths
+        description: "Cumulative COVID-19 deaths."
+      - name: avg_stringency_index
+        description: "Average government stringency index."
+      - name: pct_change
+        description: "Percentage change from previous period."
+      - name: region_share_pct
+        description: "Share percentage within the region."
+
+  - name: fact_flights
+    description: "Fact table with airport-level daily flight data. Grain: airport_id + flight_date."
+    columns:
+      - name: airport_id
+        description: "Foreign key to dim_airport."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_airport')
+              field: airport_id
+      - name: country_id
+        description: "Foreign key to dim_country."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_country')
+              field: country_id
+      - name: iso_code
+        description: "ISO country code."
+      - name: flight_date
+        description: "Date of the flights."
+        tests:
+          - not_null
+      - name: year
+        description: "Year extracted from flight_date."
+      - name: month
+        description: "Month extracted from flight_date."
+      - name: total_flights
+        description: "Total number of flights."
+      - name: departures
+        description: "Number of departures."
+      - name: arrivals
+        description: "Number of arrivals."
+      - name: ifr_flights
+        description: "Number of IFR flights."
+      - name: ifr_share_pct
+        description: "IFR flights as a percentage of total."
+      - name: flight_pct_change
+        description: "Percentage change in flights."
+      - name: new_cases
+        description: "New COVID-19 cases on this date."
+      - name: total_cases
+        description: "Cumulative COVID-19 cases."
+      - name: new_deaths
+        description: "New COVID-19 deaths on this date."
+      - name: total_deaths
+        description: "Cumulative COVID-19 deaths."
+      - name: stringency_index
+        description: "Government stringency index."
+      - name: flights_per_million_pop
+        description: "Flights per million population."
+      - name: flights_to_cases_ratio
+        description: "Ratio of flights to COVID-19 cases."
+
+  - name: vw_complete_indicator
+    description: "View that consolidates complete indicator data for analysis."
+
+  - name: vw_complete_flights
+    description: "View that consolidates complete flight data for analysis."

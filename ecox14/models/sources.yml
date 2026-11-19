@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: silver
+    schema: silver
+    tables:
+      - name: air_traffic_eu
+        description: "Cleaned operational European airport traffic data (2019-2024)"
+      - name: covid19
+        description: "Cleaned OWID COVID-19 pandemic indicators for European and partner countries"
+      - name: flights_covid_enriched
+        description: "Enriched flight series merged with daily COVID context"

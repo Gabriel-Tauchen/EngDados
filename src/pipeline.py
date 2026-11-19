@@ -1,5 +1,6 @@
 import importlib
 import logging
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -10,7 +11,7 @@ SRC_DIR = Path(__file__).resolve().parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from config import BRONZE_COVID, BRONZE_FLIGHT, setup_logging
+from config import BRONZE_COVID, BRONZE_FLIGHT, DBT_DIR, setup_logging
 import enrich_data
 import transform_covid_data
 import transform_flight_data
@@ -49,36 +50,65 @@ def run_enrich() -> None:
     enrich_data.main()
 
 
+def run_load() -> None:
+    """Load silver parquet data into DuckDB and build gold dimensional model."""
+    import load_data
+    load_data.main()
+
+
+def run_modeling() -> None:
+    """Run dbt models and tests against the gold DuckDB warehouse."""
+    import os
+
+    dbt_exe = str(DBT_DIR.parent / "venv" / "Scripts" / "dbt.exe")
+    cwd = str(DBT_DIR)
+    env = os.environ.copy()
+    env["USERPROFILE"] = str(DBT_DIR.parent)
+
+    log.info("Running dbt run...")
+    result = subprocess.run([dbt_exe, "run"], cwd=cwd, env=env)
+    if result.returncode != 0:
+        raise RuntimeError(f"dbt run failed with return code {result.returncode}")
+    log.info("dbt run completed successfully.")
+
+    log.info("Running dbt test...")
+    result = subprocess.run([dbt_exe, "test"], cwd=cwd, env=env)
+    if result.returncode != 0:
+        raise RuntimeError(f"dbt test failed with return code {result.returncode}")
+    log.info("dbt test completed successfully.")
+
+
 # Explicit pipeline stages (declares what is done and what is pending for future classes)
 STAGES = [
     ("ingest", run_ingest),
     ("transform", run_transform),
     ("enrich", run_enrich),
-    ("load", None),       # Próximas aulas: carga em banco de dados relacional
-    ("modeling", None),   # Próximas aulas: modelagem dimensional e camada Ouro
+    ("load", run_load),
+    ("modeling", run_modeling),  # dbt models and tests
 ]
 
-# Map aliases to support both English commands and Portuguese lecture names
+# Map CLI argument aliases to standard stage names
 STAGE_ALIASES = {
     "ingestao": "ingest",
     "transformacao": "transform",
     "enriquecimento": "enrich",
     "carga": "load",
+    "load": "load",
     "modelagem": "modeling",
 }
 
 
 def execute_stage(name: str, func: Callable[[], None]) -> None:
     """Execute a single pipeline stage with timing and explicit error logging."""
-    log.info("etapa %s: inicio", name)
+    log.info("stage %s: started", name)
     start_time = time.time()
     try:
         func()
     except Exception:
-        log.exception("etapa %s falhou", name)
+        log.exception("stage %s failed", name)
         raise
     elapsed = time.time() - start_time
-    log.info("etapa %s: fim em %.2fs", name, elapsed)
+    log.info("stage %s: completed in %.2fs", name, elapsed)
 
 
 def main(start_from: Optional[str] = None) -> None:
@@ -104,10 +134,11 @@ def main(start_from: Optional[str] = None) -> None:
             started = True
 
         if not started or func is None:
-            log.info("etapa %s: pulada", name)
+            log.info("stage %s: skipped", name)
             continue
 
         execute_stage(name, func)
+
 
 
 if __name__ == "__main__":

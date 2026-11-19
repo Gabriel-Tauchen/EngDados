@@ -3,7 +3,6 @@ from pathlib import Path
 
 # Base project paths (dynamically calculated from this file's location)
 ROOT_DIR = Path(__file__).resolve().parent.parent
-RAIZ = ROOT_DIR  # Alias adhering to class convention
 
 DATA_DIR = ROOT_DIR / "data"
 BRONZE_DIR = DATA_DIR / "bronze"
@@ -11,8 +10,12 @@ SILVER_DIR = DATA_DIR / "silver"
 GOLD_DIR = DATA_DIR / "gold"
 REPORTS_DIR = ROOT_DIR / "reports"
 LOG_FILE = ROOT_DIR / "pipeline.log"
+DB_PATH = GOLD_DIR / "project.duckdb"
+DBT_DIR = ROOT_DIR / "ecox14"
+
 
 # Dataset-specific paths
+
 BRONZE_COVID = BRONZE_DIR / "covid19"
 BRONZE_FLIGHT = BRONZE_DIR / "air-traffic-EU"
 SILVER_COVID = SILVER_DIR / "covid19"
@@ -43,6 +46,3 @@ def setup_logging(log_file: Path = LOG_FILE, level: int = logging.INFO) -> loggi
     )
     return logging.getLogger("pipeline")
 
-
-# Alias adhering to class slides
-configurar_log = setup_logging
