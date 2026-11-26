@@ -15,81 +15,58 @@ O projeto adota os princípios de Engenharia de Dados na Prática apresentados n
 3. **Orquestração e Retomada (`src/pipeline.py`)**: O pipeline é estruturado em etapas sequenciais com declaração explícita de etapas futuras (`None`), suportando execução total ou retomada a partir de uma etapa intermediária (`python src/pipeline.py enrich`).
 4. **Camada Prata e Enriquecimento**: O cruzamento entre as fontes tratadas é uma etapa de **Enriquecimento** que ainda pertence à camada **Prata** (`data/silver/enriched/`).
 5. **Camada Ouro e Carga em Banco Analítico (`project.duckdb`)**: Transição de diretórios para esquemas relacionais no DuckDB (`silver` e `gold`). O DuckDB é um SGBD analítico (OLAP) embutido, colunar, sem servidor, com suporte nativo a Parquet. Implementa modelagem dimensional (esquema estrela) gerenciada declarativamente pelo dbt, com testes de grão e integridade referencial antes de disponibilizar visões consolidadas.
+6. **Entrega do Dado e Visualização (Dashboard Streamlit)**: O dado chega ao usuário final através de um painel interativo desacoplado. O painel é puramente consumidor (`read_only=True`) e opera sobre a camada Ouro sem interferir no pipeline de dados.
 
 ---
 
 ## Como Instalar e Rodar o Projeto
 
-### Pré-requisitos
-- Python 3.10 ou superior
-- PowerShell (Windows) ou Bash (Linux/macOS)
+No PowerShell, a partir da pasta raiz do projeto e com o ambiente virtual ativado:
 
-### 1. Configurar o Ambiente Virtual e Instalar Dependências
-
-No terminal, a partir da pasta raiz do projeto:
-
+### 1. Instalação de Dependências
 ```powershell
-# Criar o ambiente virtual (se ainda não existir)
-python -m venv venv
-
-# Ativar o ambiente virtual no Windows (PowerShell)
+# Ativar o ambiente virtual no Windows
 .\venv\Scripts\Activate.ps1
 
-# Atualizar o pip e instalar as dependências
+# Instalar pacotes necessários (DuckDB, dbt, Streamlit, Pandas, etc.)
 pip install -r requirements.txt
 ```
 
-*(As dependências incluem `duckdb`, `dbt-core`, `dbt-duckdb`, `pandas`, `pyarrow`, `requests` e `kaggle`).*
-
----
-
 ### 2. Executar o Pipeline Completo (Ponta a Ponta)
-
-Para executar todas as etapas sequencialmente (`ingest` $\rightarrow$ `transform` $\rightarrow$ `enrich` $\rightarrow$ `load` $\rightarrow$ `modeling`):
-
 ```powershell
 python src/pipeline.py
 ```
-
-> **Nota:** Caso você não tenha token do Kaggle configurado localmente (`kaggle.json`), o pipeline detecta automaticamente a presença dos arquivos brutos já existentes na pasta `data/bronze/` e segue em frente sem interromper o fluxo.
-
----
+*(Executa sequencialmente: `ingest` $\rightarrow$ `transform` $\rightarrow$ `enrich` $\rightarrow$ `load` $\rightarrow$ `modeling`).*
 
 ### 3. Executar ou Retomar por Etapas Específicas
-
-O pipeline suporta retomada a partir de qualquer ponto usando o nome da etapa como argumento:
-
 | Comando | O que executa |
 | :--- | :--- |
-| `python src/pipeline.py ingest` | Baixa dados brutos do Kaggle para `data/bronze/` e continua até o final |
+| `python src/pipeline.py ingest` | Baixa dados brutos do Kaggle para `data/bronze/` |
 | `python src/pipeline.py transform` | Limpa e padroniza dados brutos para Parquet em `data/silver/` |
 | `python src/pipeline.py enrich` | Cruza voos diários com métricas de COVID-19 em `data/silver/enriched/` |
-| `python src/pipeline.py load` | Carrega os Parquets da Prata nas tabelas relacionais `silver.*` do DuckDB |
-| `python src/pipeline.py modeling` | Executa `dbt run` (cria tabelas/views na camada `gold`) e `dbt test` (16 testes) |
+| `python src/pipeline.py load` | Carrega os Parquets limpos nas tabelas relacionais `silver.*` do DuckDB |
+| `python src/pipeline.py modeling` | Executa `dbt run` (materializa tabelas/views na `gold`) e `dbt test` (16 testes) |
 
----
-
-### 4. Executar Comandos do dbt Diretamente (PowerShell)
-
-Para iterar diretamente nos modelos e testes declarativos da camada `gold`:
-
+### 4. Executar o Dashboard Interativo (Streamlit)
 ```powershell
-# Executar compilação e criação dos modelos dbt
-$env:USERPROFILE = (Get-Location).Path; Set-Location ecox14; ..\venv\Scripts\dbt.exe run
+streamlit run dashboard/app.py
+```
+*(Inicia o painel analítico no navegador em `http://localhost:8501`. Conecta ao banco em modo somente leitura `read_only=True` sem travar o arquivo).*
 
-# Executar a suíte de 16 testes de integridade e dados do dbt
-$env:USERPROFILE = (Get-Location).Path; Set-Location ecox14; ..\venv\Scripts\dbt.exe test
+### 5. Documentação do Modelo com dbt (`dbt docs`)
+```powershell
+# Gerar catálogo e documentação a partir do código e schema.yml
+$env:USERPROFILE = (Get-Location).Path; Set-Location ecox14; ..\venv\Scripts\dbt.exe docs generate
+
+# Visualizar a documentação interativa e o DAG de modelos no navegador
+$env:USERPROFILE = (Get-Location).Path; Set-Location ecox14; ..\venv\Scripts\dbt.exe docs serve
 ```
 
----
-
-### 5. Executar os Testes Automatizados (Python `unittest`)
-
-Para rodar todos os testes de unidade do projeto:
-
+### 6. Executar a Suíte Completa de Testes Automatizados
 ```powershell
 python -m unittest discover tests
 ```
+*(Executa 29 testes unitários cobrindo transformação, mapeamento, enriquecimento, carga DuckDB e consultas parametrizadas do dashboard).*
 
 
 ---
@@ -382,5 +359,109 @@ A separação de responsabilidades no pipeline segue o padrão moderno de arquit
    - Executa `dbt run` (compila o grafo e materializa 4 tabelas e 2 views).
    - Executa `dbt test` (roda todos os 16 testes de integridade, grão e chaves).
    - Em caso de falha em qualquer teste, interrompe a execução com erro explícito.
+
+---
+
+## Testes, Documentação e Entrega do Dado (Aula 11)
+
+A Aula 11 conclui o ciclo de vida da engenharia de dados conectando a infraestrutura técnica à ponta final: **as pessoas que tomam decisões**. Conforme destacado na disciplina:
+> *"Um pipeline que ninguém consulta é um pipeline que ninguém sente falta quando quebra. Chegar em alguém não é enfeite: é o que justifica tudo que veio antes."*
+
+A entrega confiável do dado apoia-se em três pilares fundamentais implementados nesta etapa:
+
+```text
++-----------------------------------------------------------------------------------+
+|                                 FLUXO COMPLETO                                    |
+|                                                                                   |
+|  [Fontes Públicas]                                                                |
+|  Kaggle / OWID / Eurocontrol                                                      |
+|         │                                                                         |
+|         ▼                                                                         |
+|  [data/bronze/]  ──▶ [data/silver/] ──▶ [data/gold/project.duckdb]                |
+|      (Bruto)            (Tratado)         (Esquemas silver e gold)                |
+|                                                     │                             |
+|                                                     │ (somente leitura)           |
+|                                                     ▼                             |
+|                                        [dashboard/app.py (Streamlit)]             |
+|                                        • Consumidor desacoplado                   |
+|                                        • Zero SQL na tela                         |
+|                                        • SQL parametrizado em queries.py          |
++-----------------------------------------------------------------------------------+
+```
+
+---
+
+### 1. O Dashboard é Consumidor, Não Produtor
+
+A relação entre o painel analítico e o banco de dados analítico obedece a regras estritas de isolamento:
+- **A seta aponta apenas em um sentido**: O painel visualiza a camada Ouro, mas não cria nem altera dados. Toda a transformação de engenharia já aconteceu no pipeline e no dbt.
+- **Pasta própria (`dashboard/`)**: Fica fora de `src/` porque o dashboard consome o resultado final e não faz parte da esteira produtora do pipeline.
+- **Conexão estrita em modo somente leitura (`read_only=True`)**:
+  ```python
+  con = duckdb.connect(str(DB_PATH), read_only=True)
+  ```
+  - **Evita travamento do arquivo**: O DuckDB em modo de escrita bloqueia o arquivo físico em disco para processos externos. Com `read_only=True`, o painel pode ficar aberto no navegador enquanto engenheiros continuam rodando o pipeline ou o dbt sem conflitos de lock.
+  - **Fail-fast contra mutações acidentais**: Se qualquer consulta tentar executar um `INSERT`, `UPDATE` ou `DROP`, o banco recusa a operação instantaneamente.
+
+---
+
+### 2. Onde o SQL Deve Morar: Desacoplamento Arquitetural
+
+Um erro clássico em aplicações de dados é misturar consultas SQL no meio do código de renderização visual. No projeto, adotamos a separação ensinada em aula:
+
+| Tipo de SQL | O que faz | Onde fica |
+| :--- | :--- | :--- |
+| **Criação e modelagem** | `dim_country`, `fact_indicator`, etc. | Modelos dbt em [`ecox14/models/`](file:///c:/Users/tauch/.vscode/EngDados/ecox14/models/) (versionado e testado) |
+| **Consultas de leitura** | Agrupamentos por região, filtros por ano, rankings | Módulo [`dashboard/queries.py`](file:///c:/Users/tauch/.vscode/EngDados/dashboard/queries.py) |
+| **Visualização / Tela** | Gráficos, métricas, sidebar e layout | Interface [`dashboard/app.py`](file:///c:/Users/tauch/.vscode/EngDados/dashboard/app.py) (**Zero SQL**) |
+
+#### Benefícios dessa separação:
+1. **Reaproveitamento**: Se um usuário pedir os mesmos números por relatório, e-mail ou API REST, as funções de [`dashboard/queries.py`](file:///c:/Users/tauch/.vscode/EngDados/dashboard/queries.py) já existem prontas e testadas, sem depender do Streamlit.
+2. **Defesa contra Injeção de SQL**: Valores vindos dos componentes da tela nunca são concatenados em f-strings (`f"... WHERE regiao = '{regiao}'"`). Todas as consultas utilizam parâmetros posicionais (`?`):
+   ```python
+   # Seguro contra SQL Injection
+   con.execute(sql, [region, year])
+   ```
+
+---
+
+### 3. Recursos do Painel Interativo ([`dashboard/app.py`](file:///c:/Users/tauch/.vscode/EngDados/dashboard/app.py))
+
+O painel analítico oferece exploração dinâmica com os seguintes componentes:
+- **Barra Lateral Interativa (`st.sidebar`)**: Filtros dinâmicos de ano (2019 a 2024), região e país de foco alimentados diretamente por consultas do DuckDB.
+- **KPIs de Destaque (`st.metric`)**: Total consolidado de voos no recorte, novos casos de COVID-19, índice médio de rigidez governamental (*Stringency Index*) e contagem de nações.
+- **Sobreposição Temporal Comparativa (Impact Analysis)**:
+  - Sobreposição gráfica de **Voos Totais**, **Índice de Rigor Governamental** e **Novos Casos de COVID-19** ao longo do tempo.
+  - **Toggles On/Off independentes** (`st.toggle`) para ativar ou desativar qualquer um dos três indicadores.
+  - **Escala Normalizada (0 a 100%)**: Como voos (milhares), casos de COVID (milhões) e rigidez governamental (0 a 100) possuem ordens de grandeza distintas, o modo normalizado coloca as três séries na mesma escala percentual relativa ao pico de cada uma, permitindo visualizar com clareza o momento exato em que o aperto das restrições derrubou o tráfego aéreo.
+  - Suporte a granularidade **Mensal** (captura picos de ondas e *lockdowns*) ou **Anual** (visão macro).
+- **Distribuição Regional de Tráfego (`st.bar_chart`)**: Ranking dos 10 maiores países em volume operacional de voos.
+- **Tabela Detalhada (`st.dataframe`)**: Exibição dos indicadores anuais, variações percentuais em relação ao ano anterior (*YoY*) e participação regional (*share %*).
+- **Trajetória Histórica (2019–2024) (`st.line_chart`)**: Gráfico de linha demonstrando o impacto da pandemia e a velocidade de recuperação operacional do país selecionado.
+- **Maiores Aeroportos (`st.dataframe`)**: Detalhamento dos aeroportos com maior movimentação e respectiva proporção de voos por instrumentos (IFR).
+
+---
+
+### 4. Documentação Viva com dbt (`dbt docs`)
+
+Em vez de manter dicionários de dados em planilhas que se desatualizam quando o esquema muda:
+- As descrições de modelos e colunas foram registradas no arquivo [`ecox14/models/schema.yml`](file:///c:/Users/tauch/.vscode/EngDados/ecox14/models/schema.yml), ao lado dos próprios testes de integridade.
+- O comando `dbt docs generate` compila os metadados do banco e constrói o catálogo analítico (`catalog.json`).
+- O comando `dbt docs serve` expõe uma interface gráfica navegável contendo a linhagem completa (DAG), tipos de dados, documentação de colunas e regras de validação.
+
+---
+
+### 5. Governança, Linhagem e LGPD
+
+No momento em que o dado é entregue a uma pessoa, ele passa a embasar decisões. O projeto atende às três perguntas centrais da governança de dados:
+
+1. **De onde veio este número?**
+   - **Rastreabilidade e Proveniência**: Cada camada registra metadados de extração e tratamento em arquivos `provenance.jsonl`.
+   - **Transparência na UI**: O rodapé do dashboard (`st.caption`) declara expressamente as fontes de dados primárias (*Eurocontrol* e *Our World in Data*) e a contagem de registros exibidos.
+2. **Quem pode vê-lo e como é protegido?**
+   - **Adequação à LGPD (Lei Geral de Proteção de Dados)**: O projeto utiliza exclusivamente fontes públicas de estatísticas agregadas (nível aeroporto e nível país). Nenhum dado pessoal identificável (PII) é coletado ou armazenado por decisão deliberada de arquitetura.
+3. **O que acontece se um número estiver errado?**
+   - **Reprodutibilidade**: A linhagem ponta a ponta (do CSV bruto na Bronze até as tabelas Ouro no DuckDB) permite reconstruir e auditar exatamente como cada métrica derivada (`pct_change`, `region_share_pct`, `flights_to_cases_ratio`) foi calculada.
+   - **Barreira de Testes**: 16 testes automatizados no dbt e 29 testes unitários em Python bloqueiam dados inconsistentes antes de chegarem à visualização.
 
 

@@ -18,3 +18,6 @@ ecox14/target/
 ecox14/dbt_packages/
 ecox14/logs/
 ecox14/.user.yml
+duckdb.exe
+.streamlit/
+

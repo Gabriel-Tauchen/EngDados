@@ -12,6 +12,7 @@ REPORTS_DIR = ROOT_DIR / "reports"
 LOG_FILE = ROOT_DIR / "pipeline.log"
 DB_PATH = GOLD_DIR / "project.duckdb"
 DBT_DIR = ROOT_DIR / "ecox14"
+DASHBOARD_DIR = ROOT_DIR / "dashboard"
 
 
 # Dataset-specific paths
